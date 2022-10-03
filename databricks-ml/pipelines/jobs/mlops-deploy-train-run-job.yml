@@ -1,0 +1,87 @@
+#
+# Template pipeline that deploys notebooks to a Databricks workspace
+#
+
+ parameters:
+  - name: variableFiles
+    type: object
+  - name: stage_name
+    type: string
+    
+ jobs:
+ - job: mlops_deploy_train_run_job
+   variables: 
+     - ${{ parameters.variableFiles }}
+     - name: db_token_env
+       ${{ if eq(variables.environment, 'dev') }}:
+          value: $(dbw-edap-etl-dev)
+       ${{ if eq(variables.environment, 'uat') }}:
+          value: $(dbw-edap-etl-uat)
+       ${{ if eq(variables.environment, 'prod') }}:
+         value: $(dbw-edap-etl-prod)     
+#    - template: /databricks-ml/app/conf/config_dev.yml@MlApp
+   pool:
+     name: ${{ variables.pool_name }}
+   steps:
+
+  #  - checkout: self
+  #    path: s/.self
+  #    fetchDepth: 1
+  #    persistCredentials: true
+  #  - checkout: git://$(Build.Repository.Name)@$(Build.SourceBranch)
+  #    path: ml-app
+   - checkout: MlApp
+# #      path: ml-app
+#      clean: true
+   - checkout: MlOps
+# #      path: ml-ops
+#      clean: true
+
+  #  - bash: |
+  #      rm -f ~/.databrickscfg
+  #    displayName: 'Install the python packages'
+
+  #  - task: AzureKeyVault@2
+  #    displayName: 'Get secrets'
+  #    inputs:
+  #      azureSubscription: 'gsk-corp-platforms-codeorange-edap-devtest (91c3532a-a293-4c32-a909-b3be52cb3084)'
+  #      KeyVaultName: coedapus6kvdevtest001
+  #      SecretsFilter: 'MESH-NODE-DATABRICKS-API-TOKEN-ETL'
+  #      RunAsPreJob: true   
+
+   - bash: |
+       python3 -m pip install --upgrade pip
+       pip3 install databricks-cli --upgrade
+     displayName: 'Install the databricks-cli package'
+        
+   - bash: |
+       sed -i "/\[${DATABRICKS_CLI_PROFILE}\]/{N;N;d}" ~/.databrickscfg
+       echo "[${DATABRICKS_CLI_PROFILE}]" >> ~/.databrickscfg
+       echo "host = $DATABRICKS_HOST" >> ~/.databrickscfg
+       echo "token = $DATABRICKS_TOKEN" >> ~/.databrickscfg
+       echo ${{variables.environment}}
+       echo $DATABRICKS_HOST
+       echo $DATABRICKS_TOKEN
+     env: 
+       DATABRICKS_CLI_PROFILE: ${{ variables.databricks_cli_profile }} 
+       DATABRICKS_HOST: ${{ variables.workspace_url }}
+       DATABRICKS_TOKEN: $(db_token_env)
+      #  DATABRICKS_TOKEN: $(MESH-NODE-DATABRICKS-API-TOKEN-ETL)
+     displayName: 'Set up the Databricks CLI profile'
+
+   - bash: |
+       export LC_ALL=C.UTF-8
+       export LANG=C.UTF-8
+       echo "Running: databricks --profile ${DATABRICKS_CLI_PROFILE} workspace import_dir -o -e ${NOTEBOOKS_SRC} ${NOTEBOOKS_DEST}"
+       databricks --profile ${DATABRICKS_CLI_PROFILE} workspace import_dir -o -e ${NOTEBOOKS_SRC} ${NOTEBOOKS_DEST}
+     env:
+       DATABRICKS_CLI_PROFILE: ${{ variables.databricks_cli_profile }}
+       NOTEBOOKS_SRC: $(Build.SourcesDirectory)/si-template/${{ variables.notebook_source_location }}
+       NOTEBOOKS_DEST: ${{ variables.workspace_folder }}
+     displayName: 'Deploy the Notebooks'
+
+   - script: python3 $(Build.SourcesDirectory)/si-ml-ops/databricks-ml/cicd/cicd-scripts/execute-job.py --url ${{ variables.workspace_url }} --pat $(db_token_env) --jobid 3 --notebook ${{ variables.workspace_folder }}/app/notebooks/model_train --clusterid  ${{ variables.cluster_id }}
+     displayName: 'Deploy code, train, register best model'
+
+   - script: echo $(deploymodel)
+     displayName: 'Display the deploy model variable'

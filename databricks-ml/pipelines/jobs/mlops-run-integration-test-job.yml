@@ -1,0 +1,71 @@
+#
+# Template pipeline that runs integration tests in UAT
+#
+
+ parameters:
+  - name: variableFiles
+    type: object
+  - name: stage_name
+    type: string
+    
+ jobs:
+ - job: mlops_run_integration_test_job
+   ${{ if eq(parameters.stage_name, 'mlops_deploy_code_uat') }}:
+      dependsOn: mlops_run_unit_test_job
+      condition: succeeded()
+   variables: 
+     - ${{ parameters.variableFiles }}
+     - name: db_token_env
+       ${{ if eq(variables.environment, 'dev') }}:
+          value: $(dbw-edap-etl-dev)
+       ${{ if eq(variables.environment, 'uat') }}:
+          value: $(dbw-edap-etl-uat)
+       ${{ if eq(variables.environment, 'prod') }}:
+         value: $(dbw-edap-etl-prod)
+   pool:
+     name: ${{ variables.pool_name }}
+   steps:
+  
+  #  - checkout: self
+  #    path: s/.self
+  #    fetchDepth: 1
+  #    persistCredentials: true
+  #  - checkout: git://$(Build.Repository.Name)@$(Build.SourceBranch)
+  #    path: ml-app
+   - checkout: MlApp
+     path: ml-app
+   - checkout: MlOps
+     path: ml-ops
+
+   - bash: | 
+       echo '$(db_token_env)'
+       
+   - bash: |
+       python3 -m pip install --upgrade pip
+       pip3 install databricks-cli --upgrade
+     displayName: 'Install the databricks-cli package'
+        
+   - bash: |
+       sed -i "/\[${DATABRICKS_CLI_PROFILE}\]/{N;N;d}" ~/.databrickscfg
+       echo "[${DATABRICKS_CLI_PROFILE}]" >> ~/.databrickscfg
+       echo "host = $DATABRICKS_HOST" >> ~/.databrickscfg
+       echo "token = $DATABRICKS_TOKEN" >> ~/.databrickscfg
+     env: 
+       DATABRICKS_CLI_PROFILE: ${{ variables.databricks_cli_profile }} 
+       DATABRICKS_HOST: ${{ variables.workspace_url }}
+       DATABRICKS_TOKEN: $(db_token_env)
+      #  DATABRICKS_TOKEN: $(MESH-NODE-DATABRICKS-API-TOKEN-ETL)
+     displayName: 'Set up the Databricks CLI profile'
+   - bash: |
+       export LC_ALL=C.UTF-8
+       export LANG=C.UTF-8
+       echo "Running: databricks --profile ${DATABRICKS_CLI_PROFILE} workspace import_dir -o -e ${NOTEBOOKS_SRC} ${NOTEBOOKS_DEST}"
+       databricks --profile ${DATABRICKS_CLI_PROFILE} workspace import_dir -o -e ${NOTEBOOKS_SRC} ${NOTEBOOKS_DEST}
+     env:
+       DATABRICKS_CLI_PROFILE: ${{ variables.databricks_cli_profile }}
+       NOTEBOOKS_SRC: $(Agent.BuildDirectory)/ml-app/${{ variables.notebook_source_location }}
+       NOTEBOOKS_DEST: ${{ variables.workspace_folder }}
+     displayName: 'Deploy the Notebooks'
+   - script: python3 $(Agent.BuildDirectory)/ml-ops/databricks-ml/cicd/cicd-scripts/execute-job.py --url ${{ variables.workspace_url }} --pat $(db_token_env) --jobid 3 --notebook ${{ variables.workspace_folder }}/tests/integration/model_integration --clusterid  ${{ variables.cluster_id }}
+     displayName: 'Integration tests in UAT'
+   

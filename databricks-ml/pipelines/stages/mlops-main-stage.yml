@@ -1,0 +1,80 @@
+stages:
+  - stage: mlops_deploy_code_dev
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    displayName: mlops_deploy_code_dev
+    variables:
+#       - template: /databricks-ml/app/conf/config_dev.yml@MlApp
+#       - template: ../vars/vars-mlops-template-dev.yml
+      - name: System.Debug
+        value: true
+    jobs:
+        - template: ../jobs/mlops-deploy-train-run-job.yml
+          parameters:
+            variableFiles:
+              - template: ../../../../si-template/databricks-ml/app/conf/config_dev.yml
+              - template: ../vars/vars-mlops-template-dev.yml
+            stage_name: mlops_deploy_code_dev
+
+#   - stage: mlops_deploy_code_uat
+#     # dependsOn: mlops_deploy_code_dev
+#     condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+#     displayName: mlops_deploy_code_uat
+#     variables:
+#       - template: /databricks-ml/app/conf/config_dev.yml@MlApp
+#       - template: /databricks-ml/app/conf/config_uat.yml@MlApp
+#       - template: ../vars/vars-mlops-template-dev.yml
+#       - template: ../vars/vars-mlops-template-uat.yml
+#     jobs:
+#         - template: ../jobs/mlops-run-unit-tests-job.yml
+#           parameters:
+#             variableFiles:
+#               - template: /databricks-ml/app/conf/config_dev.yml@MlApp
+#               - template: ../vars/vars-mlops-template-dev.yml   
+#         - template: ../jobs/mlops-run-integration-test-job.yml
+#           parameters:
+#             variableFiles:
+#               - template: /databricks-ml/app/conf/config_uat.yml@MlApp
+#               - template: ../vars/vars-mlops-template-uat.yml 
+#             stage_name: mlops_deploy_code_uat    
+              
+  - stage: mlops_deploy_code_prod
+    condition: and(ne(variables['Build.Reason'], 'PullRequest'), startsWith(variables['Build.SourceBranchName'], 'release'))
+    displayName: mlops_deploy_code_prod
+    variables:
+      - template: /databricks-ml/app/conf/config_prod.yml@MlApp
+      - template: ../vars/vars-mlops-template-prod.yml
+    jobs:
+        - template: ../jobs/mlops-deploy-train-run-job.yml
+          parameters:
+            variableFiles:
+              - template: /databricks-ml/app/conf/config_prod.yml@MlApp
+              - template: ../vars/vars-mlops-template-prod.yml    
+            stage_name: mlops_deploy_code_prod         
+            
+  - stage: mlops_compliance_transition_to_staging
+    # dependsOn: mlops_deploy_code_prod
+    condition: and(succeeded('mlops_deploy_code_prod'), ne(variables['Build.Reason'], 'PullRequest'), startsWith(variables['Build.SourceBranchName'], 'release'))
+    displayName: mlops_compliance_transition_to_staging
+    variables:
+      - template: /databricks-ml/app/conf/config_prod.yml@MlApp
+      - template: ../vars/vars-mlops-template-prod.yml
+    jobs:
+        - template: ../jobs/mlops-run-compliance-job.yml  # moves None to Staging
+          parameters:
+            variableFiles:
+              - template: /databricks-ml/app/conf/config_prod.yml@MlApp
+              - template: ../vars/vars-mlops-template-prod.yml     
+
+  - stage: mlops_transition_to_prod
+    # dependsOn: mlops_compliance_transition_to_staging
+    condition: and(succeeded('mlops_compliance_transition_to_staging'), ne(variables['Build.Reason'], 'PullRequest'), startsWith(variables['Build.SourceBranchName'], 'release'))
+    displayName: mlops-transition-to-prod
+    variables:
+      - template: /databricks-ml/app/conf/config_prod.yml@MlApp
+      - template: ../vars/vars-mlops-template-prod.yml
+    jobs:
+        - template: ../jobs/mlops-model-transition-to-prod-job.yml  # moves Staging to Prod
+          parameters:
+            variableFiles:
+              - template: /databricks-ml/app/conf/config_prod.yml@MlApp
+              - template: ../vars/vars-mlops-template-prod.yml

@@ -1,0 +1,12 @@
+variables:
+  - group: 'si-var-group'
+  - name: environment
+    value: 'prod'
+  - name: repositoryName
+    value: 'si-template-edap-demo'
+  - name: stage_name
+    value: 'Prod_deployment'
+  - name: vmImageName
+    value: 'ubuntu-latest'
+  - name: pool_name
+    value: 'CO-AKS-DEV-POOL'

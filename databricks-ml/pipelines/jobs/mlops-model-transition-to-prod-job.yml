@@ -1,0 +1,48 @@
+#
+# Template pipeline that compares metrics of current and new model and moves model from Staging to Production if and only if new model performs better
+#
+
+parameters:
+ - name: variableFiles
+   type: object
+
+jobs:
+ - job: mlops_compare_staging_prod_models
+   variables: 
+     - ${{ parameters.variableFiles }}
+   pool:
+     name: ${{ variables.pool_name }}
+   steps:
+   - checkout: MlOps
+     path: ml-ops
+   
+   - script: python3 $(Agent.BuildDirectory)/ml-ops/databricks-ml/cicd/cicd-scripts/execute-job.py --url ${{ variables.workspace_url }} --pat $(dbw-edap-etl-prod) --jobid 3 --notebook ${{ variables.workspace_folder }}/app/utils/compare_models --clusterid  ${{ variables.cluster_id }}
+     name: compare_model
+     displayName: 'Compare Staging and Production models'  
+
+ - deployment: mlops_transition_staging_to_prod
+   dependsOn: mlops_compare_staging_prod_models
+   condition: succeeded()
+   variables: 
+     - ${{ parameters.variableFiles }}
+     - name: deploy_model
+       value: $[ dependencies.mlops_compare_staging_prod_models.outputs['compare_model.deploymodel'] ]  
+   pool:
+     name: ${{ variables.pool_name }}
+   environment: ${{ variables.repositoryName }}_transition_staging_to_prod
+   strategy:
+    runOnce:
+      deploy:
+        steps:
+        - bash: echo 'The model version in stage '$(deploy_model)' performs better.'
+        - checkout: MlOps
+          path: ml-ops
+        
+        - script: |
+            python3 $(Agent.BuildDirectory)/ml-ops/databricks-ml/cicd/cicd-scripts/transition-model-to-prod.py \
+                --url ${{ variables.workspace_url }} \
+                --pat $(dbw-edap-etl-prod) \
+                --modelName ${{ variables.model_name }} \
+                --modelVersion ${{ variables.model_version }}
+          condition: eq(variables['deploy_model'], 'Staging')
+          displayName: Transition new model version to Production   

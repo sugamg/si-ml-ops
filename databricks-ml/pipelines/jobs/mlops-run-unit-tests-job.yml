@@ -1,0 +1,95 @@
+#
+# Template pipeline that runs testcases
+#
+
+ parameters:
+  - name: variableFiles
+    type: object
+
+ jobs:
+ - job: mlops_run_unit_test_job
+   variables: 
+     - ${{ parameters.variableFiles }}
+   pool:
+     name: ${{ variables.pool_name }}
+   steps:
+   
+  #  - checkout: self
+  #    path: s/.self
+  #    fetchDepth: 1
+  #    persistCredentials: true
+  #  - checkout: git://$(Build.Repository.Name)@$(Build.SourceBranch)
+  #    path: ml-app
+   - checkout: MlApp
+     path: ml-app
+   - checkout: MlOps
+     path: ml-ops
+ 
+   - bash: | 
+       echo '$(Build.Repository.Name)'
+       echo $(Build.Repository.ID)
+       echo $(Build.RequestedForId)
+       echo '$(Build.SourceBranchName)'
+       echo $(Build.SourceBranch)
+       echo '$(Agent.BuildDirectory)'
+       echo 'checking the conf paramaters: ${{ variables.storage_root }} '
+       echo 'checking the conf paramaters: ${{ variables.pool_name }} '
+       echo 'checking the conf paramaters: ${{ variables.workspace_url }} '
+       echo 'checking variables from vars an variable group  ex: token: $(dbw-edap-etl-dev) '
+     displayName: 'Checking the paramaters,variables and confs'
+
+  #  - task: UsePythonVersion@0
+  #    displayName: 'Use Python 3.7'
+  #    inputs:
+  #       versionSpec: 3.7    
+  #       addToPath: true
+
+  #  - bash: python3 --version
+  
+  #  - bash:  |    
+  #      export LC_ALL=en_US.UTF-8
+  #      export LANG=en_US.UTF-8
+  #      # export LC_ALL=C.UTF-8
+  #      # export LANG=C.UTF-8  
+  #      echo $LANG
+  #      echo $LC_ALL
+  #    displayName: 'Handle  encoding'        
+
+   - bash: |
+       python3 -m pip install --upgrade pip
+       pip3 install databricks-cli --upgrade
+     displayName: 'Install the databricks-cli package'
+
+   - bash: |
+       rm -f ~/.databrickscfg
+     displayName: 'Install the python packages'
+
+   - script: |
+       echo "[crm-demo]" >> ~/.databrickscfg
+       echo "host = $QA_HOST" >> ~/.databrickscfg
+       echo "token = $QA_TOKEN" >> ~/.databrickscfg
+     env:
+       QA_HOST: ${{ variables.workspace_url }}
+       QA_TOKEN: $(dbw-edap-etl-dev)
+     displayName: 'Set up Databricks cli for QA workspace'
+
+   - script: |
+       export LC_ALL=C.UTF-8
+       export LANG=C.UTF-8
+       databricks fs rm -r  ${{ variables.unit_tests_results_path }} --profile crm-demo
+     displayName: 'Remove old test reports from dbfs'
+
+   - script: python3 $(Agent.BuildDirectory)/ml-ops/databricks-ml/cicd/cicd-scripts/execute-job.py --url ${{ variables.workspace_url }} --pat $(dbw-edap-etl-dev) --jobid 3 --notebook ${{ variables.workspace_folder }}/tests/unit/test_feature_engineering --clusterid  ${{ variables.cluster_id }}
+     displayName: 'Run unit testcases'          
+
+   - script: |
+       export LC_ALL=C.UTF-8
+       export LANG=C.UTF-8
+       databricks fs cp -r  ${{ variables.unit_tests_results_path }} . --profile crm-demo
+     displayName: 'Get new test reports from dbfs'   
+
+   - task: PublishTestResults@2
+     inputs:
+       testResultsFormat: 'JUnit'
+       testResultsFiles: '*.xml' 
+       failTaskOnFailedTests: true      
