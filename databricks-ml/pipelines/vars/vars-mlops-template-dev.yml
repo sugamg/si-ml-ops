@@ -8,5 +8,5 @@ variables:
     value: 'Prod_deployment'
   - name: vmImageName
     value: 'ubuntu-latest'
-  - name: pool_name
-    value: 'CO-AKS-DEV-POOL'
+  #- name: pool_name
+  #  value: 'CO-AKS-DEV-POOL'
