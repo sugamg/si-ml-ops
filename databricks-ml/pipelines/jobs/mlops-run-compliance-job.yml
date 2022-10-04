@@ -18,7 +18,8 @@
        ${{ if eq(variables.environment, 'prod') }}:
          value: $(dbw-edap-etl-prod)  
    pool:
-     name: ${{ variables.pool_name }}
+#     name: ${{ variables.pool_name }}
+     VmImage: 'ubuntu-latest'
    steps:
    - checkout: MlOps
      path: ml-ops
