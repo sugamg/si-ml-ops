@@ -11,7 +11,7 @@ stages:
         - template: ../jobs/mlops-deploy-train-run-job.yml
           parameters:
             variableFiles:
-              - template: ../../../../si-template/databricks-ml/app/conf/config_dev.yml
+              - template: /si-template/databricks-ml/app/conf/config_dev.yml@MlApp
               - template: ../vars/vars-mlops-template-dev.yml
             stage_name: mlops_deploy_code_dev
 
