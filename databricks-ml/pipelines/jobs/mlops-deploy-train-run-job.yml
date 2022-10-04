@@ -21,7 +21,8 @@
          value: $(dbw-edap-etl-prod)     
 #    - template: /databricks-ml/app/conf/config_dev.yml@MlApp
    pool:
-     name: ${{ variables.pool_name }}
+#     name: ${{ variables.pool_name }}
+     VmImage: 'ubuntu-latest'
    steps:
 
   #  - checkout: self
