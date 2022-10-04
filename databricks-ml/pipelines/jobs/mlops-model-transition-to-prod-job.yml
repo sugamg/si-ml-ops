@@ -11,7 +11,8 @@ jobs:
    variables: 
      - ${{ parameters.variableFiles }}
    pool:
-     name: ${{ variables.pool_name }}
+#     name: ${{ variables.pool_name }}
+     VmImage: 'ubuntu-latest'
    steps:
    - checkout: MlOps
      path: ml-ops
