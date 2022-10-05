@@ -40,7 +40,8 @@
        ${{ if eq(variables.environment, 'prod') }}:
          value: $(dbw-edap-etl-prod)  
    pool:
-     name: ${{ variables.pool_name }}
+#     name: ${{ variables.pool_name }}
+     VmImage: 'ubuntu-latest'
    environment: ${{ variables.repositoryName }}_transition_none_to_staging
    strategy:
     runOnce:
