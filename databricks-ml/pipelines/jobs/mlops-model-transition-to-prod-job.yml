@@ -29,7 +29,8 @@ jobs:
      - name: deploy_model
        value: $[ dependencies.mlops_compare_staging_prod_models.outputs['compare_model.deploymodel'] ]  
    pool:
-     name: ${{ variables.pool_name }}
+#     name: ${{ variables.pool_name }}
+     VmImage: 'ubuntu-latest'
    environment: ${{ variables.repositoryName }}_transition_staging_to_prod
    strategy:
     runOnce:
